@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:p="http://www.springframework.org/schema/p"
+    xmlns:context="http://www.springframework.org/schema/context"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd">
+
+    <context:component-scan base-package="com.ndpar" />
+    <context:mbean-export />
+
+    <!-- Tibco RV containers -->
+
+    <bean id="fxTibrvListenerContainer" class="com.ndpar.tibrv.SimpleMessageListenerContainer"
+        p:service="51011"
+        p:network=";239.255.10.7"
+        p:daemon="tcp:localhost:7500"
+        p:subject=">"
+        p:messageListener-ref="tibrvRabbitAdaptor"
+        p:taskExecutor-ref="executor" />
+
+    <bean id="stockTibrvListenerContainer" class="com.ndpar.tibrv.SimpleMessageListenerContainer"
+        p:service="17785"
+        p:network=";239.255.10.42"
+        p:daemon="tcp:localhost:7500"
+        p:subject=">"
+        p:messageListener-ref="tibrvRabbitAdaptor"
+        p:taskExecutor-ref="executor" />
+
+    <bean id="executor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor"
+        p:corePoolSize="2" p:maxPoolSize="5" p:queueCapacity="10">
+        <property name="rejectedExecutionHandler">
+            <bean class="java.util.concurrent.ThreadPoolExecutor$CallerRunsPolicy" />
+        </property>
+    </bean>
+
+
+    <!-- TibRV-RabbitMQ adaptor -->
+
+    <bean id="tibrvRabbitAdaptor" class="com.ndpar.tibrv.rabbit.RabbitmqAdaptor"
+        p:exchange="ndpar.topic" />
+
+    <bean id="rabbitConnectionFactory" class="com.rabbitmq.client.ConnectionFactory"
+        p:username="guest" p:password="guest" p:port="5672" p:host="localhost" />
+
+
+    <!-- Spring-AMQP client -->
+
+    <bean class="org.springframework.amqp.rabbit.listener.SimpleMessageListenerContainer"
+        p:connectionFactory-ref="amqpConnectionFactory"
+        p:queueName="ndpar.queue"
+        p:messageListener-ref="amqpMessageListener" />
+
+    <bean id="amqpConnectionFactory" class="org.springframework.amqp.rabbit.connection.SingleConnectionFactory"
+        p:username="guest" p:password="guest" p:port="5672">
+        <constructor-arg value="localhost" />
+    </bean>
+
+    <bean id="amqpMessageListener" class="com.ndpar.tibrv.rabbit.AmqpMessageConsumer" />
+
+
+    <!-- Spring-AMQP admin (optional, to create infrastructure) -->
+
+    <bean id="rabbitAdmin" class="org.springframework.amqp.rabbit.core.RabbitAdmin">
+        <constructor-arg ref="amqpConnectionFactory" />
+    </bean>
+
+    <bean id="topic" class="org.springframework.amqp.core.TopicExchange">
+        <constructor-arg value="ndpar.topic" />
+    </bean>
+
+    <bean id="queue" class="org.springframework.amqp.core.Queue">
+        <constructor-arg value="ndpar.queue" />
+    </bean>
+
+    <bean id="usdCcyRates" class="org.springframework.amqp.core.Binding">
+        <constructor-arg index="0" ref="queue" />
+        <constructor-arg index="1" ref="topic" />
+        <constructor-arg index="2" value="#.USD.#" />
+    </bean>
+
+    <bean id="usdStockPrices" class="org.springframework.amqp.core.Binding">
+        <constructor-arg index="0" ref="queue" />
+        <constructor-arg index="1" ref="topic" />
+        <constructor-arg index="2" value="USD.#" />
+    </bean>
+</beans>
